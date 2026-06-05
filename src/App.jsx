@@ -1,6 +1,6 @@
 import { useState } from "react";
 
-const FREE_LIMIT = 3;
+const FREE_LIMIT = 999;
 const RZP_KEY = "rzp_test_XXXXXXXXXXXX"; // ← replace with your Razorpay key_id
 
 // ── helpers ──────────────────────────────────────────────────────────────────
