@@ -7,56 +7,58 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'city and country are required' })
   }
 
-  const apiKey = process.env.ANTHROPIC_API_KEY
+  const apiKey = process.env.GEMINI_API_KEY
   if (!apiKey) {
-    return res.status(500).json({ error: 'ANTHROPIC_API_KEY not set' })
+    return res.status(500).json({ error: 'GEMINI_API_KEY not set' })
   }
 
   const prompt = `You are a geopolitical safety analyst. Analyze the current war and conflict safety situation for ${city}, ${country}. Focus on world war risk, military conflicts, geopolitical tensions, alliances, and regional instability.
 
-Return ONLY valid JSON with no markdown, no backticks, no explanation. Just the raw JSON object:
+Return ONLY a raw JSON object with no markdown, no backticks, no explanation whatsoever. Start your response with { and end with }. Use this exact structure:
 {
-  "overall_score": 75,
-  "travel_advisory": "Exercise caution",
+  "overall_score": <integer 0-100, where 100 = completely safe>,
+  "travel_advisory": "<Safe to travel | Exercise caution | Avoid non-essential travel | Do not travel>",
   "factors": [
-    {"name": "Active conflict proximity", "score": 80, "icon": "⚔️"},
-    {"name": "Alliance & NATO stability", "score": 70, "icon": "🛡️"},
-    {"name": "Nuclear & WMD threat level", "score": 60, "icon": "☢️"},
-    {"name": "Regional geopolitical tension", "score": 65, "icon": "🌐"},
-    {"name": "Economic warfare & sanctions", "score": 75, "icon": "📉"},
-    {"name": "Civil unrest & internal stability", "score": 70, "icon": "🏛️"}
+    {"name": "Active conflict proximity", "score": <0-100>, "icon": "⚔️"},
+    {"name": "Alliance & NATO stability", "score": <0-100>, "icon": "🛡️"},
+    {"name": "Nuclear & WMD threat level", "score": <0-100>, "icon": "☢️"},
+    {"name": "Regional geopolitical tension", "score": <0-100>, "icon": "🌐"},
+    {"name": "Economic warfare & sanctions", "score": <0-100>, "icon": "📉"},
+    {"name": "Civil unrest & internal stability", "score": <0-100>, "icon": "🏛️"}
   ],
-  "risk_flags": ["Example flag 1", "Example flag 2"],
-  "advisory": "2-3 sentence summary about the safety situation."
+  "risk_flags": ["<max 5 short active risk indicators>"],
+  "advisory": "<2-3 sentence factual geopolitical safety summary for ${city}, ${country}>"
 }`
 
   try {
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01'
-      },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 1024,
-        messages: [{ role: 'user', content: prompt }]
-      })
-    })
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: {
+            temperature: 0.4,
+            maxOutputTokens: 1024,
+          }
+        })
+      }
+    )
 
     const data = await response.json()
-
-    // Log full response for debugging
-    console.log('Anthropic status:', response.status)
-    console.log('Anthropic response:', JSON.stringify(data))
+    console.log('Gemini status:', response.status)
+    console.log('Gemini response:', JSON.stringify(data))
 
     if (!response.ok) {
-      return res.status(500).json({ error: data.error?.message || 'Anthropic API error', details: data })
+      return res.status(500).json({ error: data.error?.message || 'Gemini API error', details: data })
     }
 
-    const text = (data.content ?? []).map(b => b.text ?? '').join('')
-    return res.status(200).json({ result: text })
+    const text = data.candidates?.[0]?.content?.parts?.[0]?.text ?? ''
+    // Strip any accidental markdown backticks
+    const clean = text.replace(/```json|```/g, '').trim()
+
+    return res.status(200).json({ result: clean })
 
   } catch (err) {
     console.error('Handler error:', err)
